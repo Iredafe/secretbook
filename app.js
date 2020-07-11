@@ -30,7 +30,8 @@ app.use(express.static("public"));
  const userSchema = new mongoose.Schema({
     email: String,
     password: String,
-    googleId: String
+    googleId: String,
+    secret: String
 });
 userSchema.plugin(passportLocalMongoose);
 userSchema.plugin(findOrCreate);
@@ -40,15 +41,14 @@ const User = mongoose.model("User", userSchema);
         passport.use(User.createStrategy());
 
         passport.serializeUser(function(user, done) {
-            done(null, user.id);
+            done(null, user);
           });
           
-          passport.deserializeUser(function(id, done) {
-           User.findById(function(err, user){
-            done(err, user);
-           });
+          passport.deserializeUser(function(user, done) {
+            done(null, user);
           });
-        passport.use(new GoogleStrategy({
+          
+            passport.use(new GoogleStrategy({
             clientID: process.env.CLIENT_ID,
             clientSecret: process.env.CLIENT_SECRET,
             callbackURL: "http://localhost:3000/auth/google/secrets",
@@ -62,7 +62,7 @@ const User = mongoose.model("User", userSchema);
                 });
           }
         ));
-        
+
 app.get("/", function(req, res){
             res.render("home");
         });      
@@ -83,7 +83,6 @@ app.get("/login", function(req, res){
 });
 
 app.post("/login", function(req, res){
-
     const user = new User({
         username: req.body.username,
         password: req.body.password
@@ -102,11 +101,18 @@ console.log(err);
 })
 
 app.get("/secrets", function(req, res){
-    if(req.isAuthenticated()){
-        res.render("secrets");
-    }else{
-        res.redirect("/login");
-    }
+    
+User.find({"secret": {$ne: null}}, function(err, foundUsers){
+if(err){
+console.log(err);
+}else{
+if(foundUsers){
+    res.render("secrets", {userWithSecrets: foundUsers});
+}
+}
+})
+
+
 })
 app.get("/register", function(req, res){
 
@@ -115,6 +121,35 @@ app.get("/register", function(req, res){
 app.get("/logout", function(req, res){
     req.logout();
     res.redirect("/");
+})
+
+
+app.get("/submit", function(req, res){
+    if(req.isAuthenticated()){
+        res.render("submit");
+    }else{
+        res.redirect("/login");
+    }
+})
+
+app.post("/submit", function(req, res){
+
+const submittedSecret = req.body.secret;
+console.log(req.user)
+User.findById(req.user._id, function(err, foundUser){
+    if(err){
+console.log(err);
+    }
+    else{
+    if(foundUser){
+foundUser.secret = submittedSecret
+foundUser.save(function(){
+    res.redirect("/secrets");
+})
+    }
+}
+
+})
 })
 
 app.post("/register", function(req, res){
@@ -131,10 +166,6 @@ app.post("/register", function(req, res){
     
 });
     
-
-
-
-
 
 app.listen(3000, function(){
     console.log("Server started on port 3000.");
